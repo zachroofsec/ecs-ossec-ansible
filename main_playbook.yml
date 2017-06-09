@@ -1,0 +1,63 @@
+- name: "Creating All OSSEC Infrastructure"
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    # Any overarching variables that are ubiquitous to the project
+    playbook_state: "present"
+
+    playbook_ossec_naming:
+      client: "ossec_client"
+      server: "ossec_server"
+
+    # When going into PROD, set this to `true` to harden security groups
+    playbook_post_sec_harden: true
+
+  pre_tasks:
+    - include: tests.yml
+      tags: "tests"
+
+  roles:
+    # Provision underlying VPC infrastructure and Security Groups
+    - {
+        role: "zachroof.vpc_role",
+        # Due to Ansible's global state within the play, we prefix our variables
+        vpc_role_state: "{{ playbook_state }}",
+        vpc_role_ossec_client_name: "{{ playbook_ossec_naming.client }}",
+        vpc_role_ossec_server_name: "{{ playbook_ossec_naming.server }}",
+        tags: "vpc_role"
+      }
+
+    # Provision the Auto Scaling Group (ASG) related infrastructure
+    # This also includes: Launch Configurations, hardened IAM Policies, userdata scripts, etc.
+    # As seen below, all inter-role variable sharing is explicitly passed
+    - {
+        role: "zachroof.autoscaling_role",
+        autoscaling_role_state: "{{ playbook_state }}",
+        autoscaling_role_region: "{{ vpc_role_vpc_region }}",
+        autoscaling_role_sgs: "{{ vpc_role_sgs }}",
+        autoscaling_role_vpc_id: "{{ vpc_role_vpc_output.vpc.id }}",
+        autoscaling_role_azs: "{{ vpc_role_subnet_cdr_map.keys() | list }}",
+        autoscaling_role_ossec_naming: "{{ playbook_ossec_naming }}",
+        tags: "autoscaling_role"
+      }
+
+    - {
+        role: "zachroof.ecs_ossec_role",
+        ecs_ossec_role_state: "{{ playbook_state }}",
+        ecs_ossec_role_region: "{{ vpc_role_vpc_region }}",
+        ecs_ossec_role_ossec_naming: "{{ playbook_ossec_naming }}",
+        ecs_ossec_role_ecs_cluster: "{{ autoscaling_role_ecs_cluster }}",
+        ecs_ossec_role_ecs_instance_attr_val: "{{ autoscaling_role_ecs_instance_attr_val }}",
+        tags: "ecs_ossec_role"
+      }
+
+# Harden the security groups of the deployment
+  post_tasks:
+    - include: sec_harden.yml
+      vars:
+        sec_harden_sgs: "{{ vpc_role_sgs }}"
+        sec_harden_vpc_output: "{{ vpc_role_vpc_output }}"
+        sec_harden_vpc_region: "{{ vpc_role_vpc_region }}"
+      when: playbook_post_sec_harden == true
+      tags: "post_sec_harden"

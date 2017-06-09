@@ -1,0 +1,27 @@
+- name: "Checking Ansible Version"
+  assert:
+    that:
+      - "ansible_version.full | version_compare('2.4', '>=')"
+    msg: "Ansible version must be >= 2.4"
+  register: "playbook_ansible_check_output"
+  tags: "ansible_check"
+
+- debug: var="playbook_ansible_check_output" verbosity=3
+
+- name: "Checking If AWS CLI Is Installed"
+  shell: "which aws"
+  ignore_errors: true
+  register: "playbook_aws_check_output"
+  tags: "awscli_check"
+
+- debug: var="playbook_aws_check_output" verbosity=3
+
+- name: "Fail If AWS CLI Isn't Installed"
+  assert:
+    that:
+      - "{{playbook_aws_check_output.failed}} == false"
+    msg: "Please install the AWS CLI"
+  register: "playbook_aws_check_failed"
+  tags: "awscli_check_failed"
+
+- debug: var="playbook_aws_check_failed" verbosity=3

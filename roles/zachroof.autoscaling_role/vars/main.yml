@@ -1,0 +1,45 @@
+# Mapping for the ECS optimized amis that AWS maintains
+# These will change with future versions of the ECS Agent, etc.
+# Subscribe to the below link for update notifications:
+# https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ECS-AMI-SubscribeTopic.html
+autoscaling_role_region_ami_map:
+  us-east-1: "ami-275ffe31"
+  us-east-2: "ami-62745007"
+  us-west-1: "ami-689bc208"
+  us-west-2: "ami-62d35c02"
+  eu-west-1: "ami-95f8d2f3"
+  eu-west-2: "ami-bf9481db"
+  eu-central-1: "ami-085e8a67"
+  ap-northeast-1: "ami-f63f6f91"
+  ap-southeast-1: "ami-b4ae1dd7"
+  ap-southeast-2: "ami-fbe9eb98"
+  ca-central-1: "ami-ee58e58a"
+
+# Leveraged to make the deployment a lot quicker but this might not
+# be cost optimized based on your use case
+autoscaling_role_instance_type: "m3.medium"
+
+autoscaling_role_iam_role:
+  client: "zachroof.autoscaling-role.client"
+  server: "zachroof.autoscaling-role.server"
+
+# Private DNS space that the OSSEC Server leverages
+autoscaling_role_ossec_zone: "ossec"
+
+# The FQDN that the OSSEC server/manager attaches to.
+# We call it "manager" here because there might be other servers within the OSSEC DNS namespace
+# (into the future)
+autoscaling_role_ossec_fqdn: "manager.{{ autoscaling_role_ossec_zone }}"
+
+# The ECS cluster is created in the ecs_ossec_role, however we need to pass the cluster name
+# into the container instance's userdata script.
+# We export this value into the ecs_ossec_role
+# This variable can't have a "." due to AWS naming restrictions
+autoscaling_role_ecs_cluster: "zachroof-ecs_ossec_role-ossec_cluster"
+
+# ECS_INSTANCE_ATTRIBUTES value for the userdata's ECS agent config
+# This allows the OSSEC server to be placed on the EC2 instance with the static private DNS
+# We export this value into the ecs_ossec_role
+autoscaling_role_ecs_instance_attr_val:
+  client: "client"
+  server: "server"

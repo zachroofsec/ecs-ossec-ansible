@@ -1,0 +1,151 @@
+Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+MIME-Version: 1.0
+
+--==BOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+#!/bin/bash
+yum install -y aws-cli jq awslogs
+yum update -y
+
+# Apply security patches every 24 hours
+echo "1 0 * * * yum update --security" >> /var/spool/cron/root
+
+export AWS_DEFAULT_REGION="{{ autoscaling_role_region }}"
+INSTANCE_ID=`curl -s http://169.254.169.254/latest/meta-data/instance-id`
+
+{% if item == 'server' %}
+
+# Attach the OSSEC server's private DNS to the VPC's private hosted zone
+
+export INSTANCE_PRIV_HOST=`curl -s http://169.254.169.254/latest/meta-data/local-hostname`
+
+jq -n --arg INSTANCE_PRIV_HOST "$INSTANCE_PRIV_HOST" '{
+  Comment: "Attaching OSSEC Server To Private Hosted Zone",
+  Changes: [
+    {
+      Action: "UPSERT",
+      ResourceRecordSet: {
+        Name: "{{ autoscaling_role_ossec_fqdn }}",
+        Type: "CNAME",
+        TTL: 60,
+        ResourceRecords: [{
+          Value: $INSTANCE_PRIV_HOST
+        }]
+      }
+    }
+  ]
+  }' > /tmp/dns_upsert
+
+  aws route53 change-resource-record-sets\
+    --hosted-zone-id "{{ autoscaling_role_vpc_zone_output.result.zone_id }}"\
+    --change-batch file:///tmp/dns_upsert
+
+{% endif %}
+
+# By default, containers can access the IAM policies that are attached to the
+# overarching container instance.  We drop these permissions and force all
+# access through the container's IAM policy.  The tradeoff is that we cant
+# leverage the higher throughput "host" docker network.  Given the current scope
+# the of deployment, I think this tradeoff is tolerable.  Also, using the "host"
+# docker network inhibits network isolation and docker's dynamic port mappings.
+# https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html
+
+iptables --insert FORWARD 1 --in-interface docker+ --destination 169.254.169.254/32 --jump DROP
+
+# ECS_AGENT configs.
+
+cat <<'EOF' >> /etc/ecs/ecs.config
+ECS_CLUSTER={{ autoscaling_role_ecs_cluster }}
+ECS_LOGLEVEL=info
+ECS_LOGFILE=/var/log/ecs-agent.log
+ECS_DISABLE_PRIVILEGED=true
+ECS_SELINUX_CAPABLE=true
+ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=5m
+ECS_ENABLE_TASK_IAM_ROLE=true
+ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true
+ECS_INSTANCE_ATTRIBUTES={"name":"{{ autoscaling_role_ecs_instance_attr_val[item] }}"}
+EOF
+
+# The rest of this script is taken from
+# https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_cloudwatch_logs.html
+
+--==BOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+# Inject the CloudWatch Logs configuration file contents
+cat > /etc/awslogs/awslogs.conf <<- EOF
+[general]
+state_file = /var/lib/awslogs/agent-state
+
+[/var/log/dmesg]
+file = /var/log/dmesg
+log_group_name = /var/log/dmesg
+log_stream_name = {cluster}/{container_instance_id}
+
+[/var/log/messages]
+file = /var/log/messages
+log_group_name = /var/log/messages
+log_stream_name = {cluster}/{container_instance_id}
+datetime_format = %b %d %H:%M:%S
+
+[/var/log/docker]
+file = /var/log/docker
+log_group_name = /var/log/docker
+log_stream_name = {cluster}/{container_instance_id}
+datetime_format = %Y-%m-%dT%H:%M:%S.%f
+
+[/var/log/ecs/ecs-init.log]
+file = /var/log/ecs/ecs-init.log.*
+log_group_name = /var/log/ecs/ecs-init.log
+log_stream_name = {cluster}/{container_instance_id}
+datetime_format = %Y-%m-%dT%H:%M:%SZ
+
+[/var/log/ecs/ecs-agent.log]
+file = /var/log/ecs/ecs-agent.log.*
+log_group_name = /var/log/ecs/ecs-agent.log
+log_stream_name = {cluster}/{container_instance_id}
+datetime_format = %Y-%m-%dT%H:%M:%SZ
+
+[/var/log/ecs/audit.log]
+file = /var/log/ecs/audit.log.*
+log_group_name = /var/log/ecs/audit.log
+log_stream_name = {cluster}/{container_instance_id}
+datetime_format = %Y-%m-%dT%H:%M:%SZ
+
+EOF
+
+--==BOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+#!/bin/bash
+# Set the region to send CloudWatch Logs data to (the region where the container instance is located)
+region=$(curl -s 169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
+sed -i -e "s/region = us-east-1/region = $region/g" /etc/awslogs/awscli.conf
+
+--==BOUNDARY==
+Content-Type: text/upstart-job; charset="us-ascii"
+
+#upstart-job
+description "Configure and start CloudWatch Logs agent on Amazon ECS container instance"
+author "Amazon Web Services"
+start on started ecs
+
+script
+	exec 2>>/var/log/ecs/cloudwatch-logs-start.log
+	set -x
+
+	until curl -s http://localhost:51678/v1/metadata
+	do
+		sleep 1
+	done
+
+	# Grab the cluster and container instance ARN from instance metadata
+	cluster=$(curl -s http://localhost:51678/v1/metadata | jq -r '. | .Cluster')
+	container_instance_id=$(curl -s http://localhost:51678/v1/metadata | jq -r '. | .ContainerInstanceArn' | awk -F/ '{print $2}' )
+
+	# Replace the cluster name and container instance ID placeholders with the actual values
+	sed -i -e "s/{cluster}/$cluster/g" /etc/awslogs/awslogs.conf
+	sed -i -e "s/{container_instance_id}/$container_instance_id/g" /etc/awslogs/awslogs.conf
+
+	service awslogs start
+	chkconfig awslogs on
+end script
+--==BOUNDARY==--

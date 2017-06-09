@@ -1,0 +1,138 @@
+# The userdata script within the OSSEC server will automatically map to this zone on boot.
+# The output of this command is also leveraged to harden the route53 iam policy
+- name: "Create a VPC Private Hosted Zone For Private OSSEC Server DNS"
+  route53_zone:
+    vpc_id: "{{ autoscaling_role_vpc_id }}"
+    vpc_region: '{{ autoscaling_role_region }}'
+    region: "{{ autoscaling_role_region }}"
+    zone: "{{ autoscaling_role_ossec_zone }}"
+    state: "{{ autoscaling_role_state }}"
+    comment: "Private Hosted Zone For OSSEC Server"
+  register: "autoscaling_role_vpc_zone_output"
+  tags: "vpc_zone"
+
+- debug: var="autoscaling_role_vpc_zone_output" verbosity=3
+
+- name: "Create IAM Roles for OSSEC Client And Server"
+  iam_role:
+    name: "{{ autoscaling_role_iam_role[item] }}"
+    assume_role_policy_document: "{{ lookup('file','iam_ec2_trust.json') }}"
+    state: "{{ autoscaling_role_state }}"
+    managed_policy:
+      - "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+  with_items:
+    - "client"
+    - "server"
+  register: "autoscaling_role_shared_iam_role_output"
+  tags: "shared_iam_role"
+
+- debug: var="autoscaling_role_shared_iam_role_output" verbosity=3
+
+- name: "Attach A Shared IAM Policy For ECS Container Instance Logging"
+  iam_policy:
+    iam_type: "role"
+    iam_name: "{{ autoscaling_role_iam_role[item] }}"
+    policy_name: "zachroof.autoscaling_role.logs_policy"
+    policy_json: "{{ lookup('template', 'iam_awslogs_policy.j2' ) }}"
+    state: "{{ autoscaling_role_state }}"
+    region: "{{ autoscaling_role_region }}"
+  with_items:
+    - "client"
+    - "server"
+  register: "autoscaling_role_log_policy_output"
+  tags: "log_iam_policies"
+
+- debug: var="autoscaling_role_log_policy_output" verbosity=3
+
+# Allows the OSSEC Server to map to a static private DNS entry (manager.ossec)
+# We harden to the hosted zone's id
+- name: "Attach Route 53 Policy To OSSEC Server Role"
+  iam_policy:
+    iam_type: "role"
+    iam_name: "{{ autoscaling_role_iam_role.server }}"
+    policy_name: "zachroof.autoscaling_role.rt53_policy"
+    policy_json: "{{ lookup('template', 'iam_rt53_policy.j2') }}"
+    state: "{{ autoscaling_role_state }}"
+    region: "{{ autoscaling_role_region }}"
+  register: "autoscaling_role_server_policies_output"
+  tags: "server_iam_policies"
+
+- debug: var="autoscaling_role_server_policies_output" verbosity=3
+
+# PROD-TODO: Investigate enabling Security Enhanced Linux (SELinux) within the AWS' ECS ami that we're
+# leveraging.  Also investigate SELinux policies for OSSEC Server/Agent docker containers
+
+- name: "Create OSSEC Server and Client Launch Configurations"
+  ec2_lc:
+    # Needed for patches
+    assign_public_ip: true
+    # ebs optimized not available for certain instance classes.  Please change based on the instance class
+    # that you select.
+    ebs_optimized: false
+    image_id: "{{ autoscaling_role_region_ami_map[autoscaling_role_region] }}"
+    instance_monitoring: true
+    instance_profile_name: "{{ autoscaling_role_iam_role[item] }}"
+    name: "zachroof.autoscaling_role.{{ autoscaling_role_ossec_naming[item] }}"
+    state: "{{ autoscaling_role_state }}"
+    region: "{{ autoscaling_role_region }}"
+    # Uncomment for SSH
+    # key_name: default
+    security_groups:
+      - "{{ autoscaling_role_sgs[item] }}"
+      - "{{ autoscaling_role_sgs.pre_auth_internode }}"
+      - "{{ autoscaling_role_sgs.post_auth_internode }}"
+    instance_type: "{{ autoscaling_role_instance_type }}"
+    vpc_id: "{{ autoscaling_role_vpc_id }}"
+    user_data: "{{ lookup('template','lc_userdata.j2') }}"
+    volumes:
+        # Following the recommendations for ECS Optimized AMI
+        # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-ami-storage-config.html
+        - device_name: "/dev/xvdcz"
+          volume_size: 22
+          device_type: gp2
+          delete_on_termination: true
+          encrypted: true
+  with_items:
+    - "client"
+    - "server"
+  tags: "create_lc"
+  register: "autoscaling_role_launch_config_output"
+
+- debug: var="autoscaling_role_launch_config_output" verbosity=3
+
+- name: "Retrieve Subnet Ids To Create Auto Scaling Group"
+  ec2_vpc_subnet_facts:
+    region: "{{ autoscaling_role_region }}"
+    filters:
+      vpc-id: "{{ autoscaling_role_vpc_id }}"
+  tags: "subnet_facts"
+  register: "autoscaling_role_subnet_facts_output"
+
+- debug: var="autoscaling_role_subnet_facts_output" verbosity=3
+
+# For Disaster Recovery we place everything in an ASG
+- name: "Create OSSEC Client and Server Auto Scaling Groups"
+  ec2_asg:
+    availability_zones: "{{ autoscaling_role_azs }}"
+    name: "zachroof.autoscaling_role.{{ autoscaling_role_ossec_naming[item] }}"
+    launch_config_name: "zachroof.autoscaling_role.{{ autoscaling_role_ossec_naming[item] }}"
+    health_check_period: 60
+    health_check_type: EC2
+    replace_all_instances: yes
+    replace_batch_size: 1
+    state: "{{ autoscaling_role_state }}"
+    tags:
+      - Name: "zachroof.autoscaling_role.{{ autoscaling_role_ossec_naming[item] }}"
+    min_size: 1
+    max_size: 1
+    desired_capacity: 1
+    region: "{{ autoscaling_role_region }}"
+    # Get all subnet id's of a given VPC
+    vpc_zone_identifier: "{{ autoscaling_role_subnet_facts_output|json_query('subnets[*].id')|list }}"
+  with_items:
+    - "client"
+    - "server"
+  tags: "asg"
+  register: "autoscaling_role_autoscaling_group_output"
+
+- debug: var="autoscaling_role_autoscaling_group_output" verbosity=3

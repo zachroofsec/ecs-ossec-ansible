@@ -1,0 +1,25 @@
+    - name: "Give OSSEC Agent/Server 5 minutes To Register And Bootstrap"
+      pause:
+        # This value was tested with the m3.medium instance class.  If you change the instance class, you
+        # might need to adjust this value.
+        minutes: 5
+      register: "sec_harden_pause_output"
+
+    - debug: var="sec_harden_pause_output" verbosity=3
+
+    - name: "Harden Security Groups By Disabling authd Accessibility"
+      ec2_group:
+        name: "{{ sec_harden_sgs.pre_auth_internode  }}"
+        state: "present"
+        description: "{{ sec_harden_sgs.pre_auth_internode  }}"
+        vpc_id: "{{ sec_harden_vpc_output.vpc.id }}"
+        region: "{{ sec_harden_vpc_region }}"
+        # We put this as a placeholder because by default, AWS will add outbound access to
+        # the world
+        rules_egress:
+          - proto: all
+            cidr_ip: 127.0.0.1/32
+      tags: "pre_auth_internode_delete_sg"
+      register: "sec_harden_pre_auth_delete_sg_output"
+
+    - debug: var="sec_harden_pre_auth_delete_sg_output" verbosity=3

@@ -1,0 +1,108 @@
+- name: "Create ECS Cluster For OSSEC Deployment"
+  ecs_cluster:
+    name: "{{ ecs_ossec_role_ecs_cluster }}"
+    state: "{{ ecs_ossec_role_state }}"
+    region: "{{ ecs_ossec_role_region }}"
+  tags: "ecs_cluster"
+  register: "ecs_ossec_role_create_cluster_output"
+
+- debug: var="ecs_ossec_role_create_cluster_output" verbosity=3
+
+- name: "Wait For EC2 Servers To Register Into Cluster"
+  ecs_cluster:
+    name: "{{ ecs_ossec_role_ecs_cluster }}"
+    state: "has_instances"
+    region: "{{ ecs_ossec_role_region }}"
+    delay: 60 # In seconds
+    repeat: 5
+  when: ecs_ossec_role_state == "present"
+  tags: "ecs_cluster_reg"
+  register: "ecs_ossec_role_cluster_wait_output"
+
+- debug: var="ecs_ossec_role_cluster_wait_output" verbosity=3
+
+- name: "Check For The Existence Of OSSEC Cloudwatch Log Streams"
+  shell: "aws logs describe-log-streams --log-group-name {{ item.value.log_group }} --region {{ ecs_ossec_role_region }}"
+  ignore_errors: true
+  with_dict: "{{ ecs_ossec_role_ecs_meta }}"
+  register: "ecs_ossec_role_cloudwatch_check_output"
+  when: ecs_ossec_role_state == "present"
+  tags: "logs_existence"
+
+- debug: var="ecs_ossec_role_cloudwatch_check_output" verbosity=3
+
+# Only create streams if previous command couldn't find them
+- name: "Create Cloudwatch Streams For OSSEC Client/Server"
+  shell: "aws logs create-log-group --log-group-name {{ item.value.log_group }} --region {{ ecs_ossec_role_region }}"
+  with_dict: "{{ ecs_ossec_role_ecs_meta }}"
+  when:
+    - ecs_ossec_role_state == "present"
+    - ecs_ossec_role_cloudwatch_check_output|failed
+
+- name: "Create OSSEC Server/Client ECS Task Definitions"
+  ecs_taskdefinition:
+    region: "{{ ecs_ossec_role_region }}"
+    state: "{{ ecs_ossec_role_state }}"
+    containers:
+    - name: "{{ item.value.name }}"
+      # PROD-TODO: Set ulimits
+      # PROD-TODO: Set this mapping once you settle on an instance type
+      # cpu: "{{ item.value.cpu }}"
+      essential: true
+      image: "{{ item.value.dockerhub_repo }}/{{ item.value.name }}"
+      logConfiguration:
+        logDriver: "awslogs"
+        options:
+          awslogs-region: "{{ ecs_ossec_role_region }}"
+          awslogs-group: "{{ item.value.log_group }}"
+      privileged: false
+      # PROD-TODO: Update this mapping once you settle on an instance type
+      memory: "{{ item.value.memory }}"
+      mountPoints:
+      - containerPath: "/var/ossec/data"
+        sourceVolume: "ossec-data"
+        readOnly: false
+      # We expose the host's logs within a unique directory so it doesn't clobber
+      # the container's /var/log
+      - containerPath: "/var/instance_log"
+        sourceVolume: "linux-logs"
+        readOnly: true
+      portMappings:
+      - containerPort: 1514
+        hostPort: 1514
+        protocol: udp
+      # This is effectively disabled through time limited security groups within the play
+      - containerPort: 1515
+        hostPort: 1515
+        protocol: tcp
+    volumes:
+    - name: "ossec-data"
+      host:
+        sourcePath: "/var/ossec/data"
+    - name: "linux-logs"
+      host:
+        sourcePath: "/var/log"
+    family: "{{ item.value.name }}"
+  register: "ecs_ossec_role_task_def_output"
+  tags: "ecs_task_reg"
+  with_dict: "{{ ecs_ossec_role_ecs_meta }}"
+
+- debug: var="ecs_ossec_role_task_def_output" verbosity=3
+
+- name: "Setup OSSEC Server/Client ECS Services"
+  ecs_service:
+    state: "{{ ecs_ossec_role_state }}"
+    name: "{{ item.value.name }}"
+    cluster: "{{ ecs_ossec_role_ecs_cluster }}"
+    region: "{{ ecs_ossec_role_region }}"
+    task_definition: "{{ item.value.name }}"
+    desired_count: 1
+    # Per the assignment, make sure that the containers are on different
+    # boxes.
+    placement_constraints:
+      - type: "memberOf"
+        expression: "attribute:name == {{ item.value.instance_attr_val }}"
+  register: "ecs_ossec_service_output"
+  tags: "ecs_service"
+  with_dict: "{{ ecs_ossec_role_ecs_meta }}"
+- debug: var="ecs_ossec_service_output" verbosity=3

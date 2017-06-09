@@ -1,0 +1,17 @@
+ecs_ossec_role_ecs_meta:
+  server:
+    instance_attr_val: "{{ ecs_ossec_role_ecs_instance_attr_val.server }}"
+    dockerhub_repo: "zroof"
+    log_group: "zachroof.ecs_ossec_role.ossec_server"
+    name: "{{ ecs_ossec_role_ossec_naming.server }}"
+    # 1 vCPU == 1024 units
+    cpu: 1024
+    memory: 300
+  client:
+    instance_attr_val: "{{ ecs_ossec_role_ecs_instance_attr_val.client }}"
+    dockerhub_repo: "zroof"
+    log_group: "zachroof.ecs_ossec_role.ossec_client"
+    name: "{{ ecs_ossec_role_ossec_naming.client }}"
+    # 1 vCPU == 1024 units
+    cpu: 1024
+    memory: 300

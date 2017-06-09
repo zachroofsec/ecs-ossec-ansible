@@ -1,0 +1,20 @@
+### VPC VARS
+vpc_role_vpc_name: "zachroof.vpc_role.vpc"
+vpc_role_vpc_region: "us-east-1"
+vpc_role_vpc_cidr_block: "10.0.0.0/16"
+
+# VPC Subnet-CIDR mapping.  Please specify all possible AZs in the VPC
+vpc_role_subnet_cdr_map:
+  us-east-1a: "10.0.0.0/24"
+  us-east-1b: "10.0.1.0/24"
+  us-east-1c: "10.0.2.0/24"
+  us-east-1d: "10.0.3.0/24"
+  us-east-1e: "10.0.4.0/24"
+
+### SECURITY GROUP VARS
+# These security group declarations will be exported into the autoscaling module for EC2 configuration
+vpc_role_sgs:
+  client: "zachroof.vpc_role.client"
+  server: "zachroof.vpc_role.server"
+  pre_auth_internode: "zachroof.vpc_role.pre_auth_internode"
+  post_auth_internode: "zachroof.vpc_role.post_auth_internode"
