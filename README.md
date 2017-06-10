@@ -2,7 +2,7 @@
 My first time using Ansible! Woo hoo
 
 This playbook orchestrates an OSSEC Client and Server environment through AWS Elastic Container Service.
-The client finds the server through a Private Hosted Zone within the created VPC (`manager.ossec`)
+The client finds the server through a Private Hosted Zone (`manager.ossec`) within the created VPC
 
 You don't need to build the docker environments found in `docker-ossec-client` and `docker-ossec-server`.
 These have been built and pushed to `https://hub.docker.com/r/zroof/ossec_server/` and `https://hub.docker.com/r/zroof/ossec_client/`
