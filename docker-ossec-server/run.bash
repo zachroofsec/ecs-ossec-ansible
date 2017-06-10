@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script was heavily inspired from
-# https://github.com/xetus-oss/docker-ossec-server
+# https://github.com/xetus-oss/docker-ossec-server/blob/master/run.bash
 # I cleaned up the script and took out items/services not needed for the deployment
 
 source /data_dirs.env

@@ -1,11 +1,11 @@
 FROM phusion/baseimage:0.9.18
 MAINTAINER Zach Roof <zroof85@gmail.com>
 
-# This DOCKERFILE was heavily inspired from
+# This DOCKERFILE (and other items in the directory) was heavily inspired from
 # https://github.com/xetus-oss/docker-ossec-server
 # I'll denote my own work where necessary
 
-# it's usually best practice to leverage a non-root user but it seems that this
+# It's usually best practice to leverage a non-root user but it seems that this
 # container needs to run with root access
 # FOR-PROD - Investigate more
 # https://groups.google.com/forum/#!topic/ossec-list/UI6Yng70wh0
@@ -52,9 +52,6 @@ RUN chmod 750 /init.bash &&\
   sync && /init.bash &&\
   sync && rm /init.bash
 
-#
-# Add the bootstrap script
-#
 ADD run.bash /run.bash
 RUN chmod 750 /run.bash
 

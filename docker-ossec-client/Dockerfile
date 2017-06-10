@@ -1,10 +1,10 @@
 FROM phusion/baseimage:0.9.18
 MAINTAINER Zach Roof <zroof85@gmail.com>
 
-# With inspiration from
-# https://hub.docker.com/r/xetusoss/ossec-server/~/dockerfile/
-# I took the aforementioned Dockerfile and modified it for OSSEC agent
-# functionality
+# The items in this directory are heavily inspired from
+# https://github.com/xetus-oss/docker-ossec-server
+
+# I took the Dockerfile and modified it for OSSEC agent functionality
 
 # I added in the following line for updates (including security updates)
 RUN apt-get update && apt-get upgrade -y -o Dpkg::Options::="--force-confold"
@@ -28,7 +28,6 @@ RUN chmod -R 750 /var/ossec/ &&\
   chown -R ossec:ossec /var/ossec/
 
 COPY run.sh	/
-
 RUN chmod -R 750 /run.sh &&\
   chown -R ossec:ossec /run.sh
 
@@ -37,7 +36,4 @@ VOLUME ["/var/instance_log"]
 # Expose ports for sharing
 EXPOSE 1514/udp 1515/tcp
 
-#
-# Define default command.
-#
 ENTRYPOINT ["/run.sh"]

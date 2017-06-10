@@ -1,15 +1,14 @@
 #!/bin/bash
 
-# Through security groups, we only allow agents to communicate with the ossec manager
-# over port 1515.
-
-# PROD-TODO put in retry logic if MANAGER is offline.  (This retry should be in
-# the background)
+# I added some retry logic if the manager isn't initially available
 while [ ! -f /var/ossec/etc/client.keys ];
 do
     /var/ossec/bin/agent-auth -m manager.ossec -p 1515
     sleep 60
 done
+
+# Everything else in this script was modified from
+# https://github.com/xetus-oss/docker-ossec-server/blob/master/run.bash
 
 function ossec_shutdown(){
 /var/ossec/bin/ossec-control stop;
