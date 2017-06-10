@@ -16,3 +16,5 @@ You'll notice some items that say `PROD-TODO:`.  If you're deploying into PROD, 
 4) AWS credentials with a poweruser role attached
   * `export AWS_ACCESS_KEY_ID=foo`
   * `export AWS_SECRET_ACCESS_KEY=bar`
+
+5) `ansible-playbook main_playbook.yml` :D
