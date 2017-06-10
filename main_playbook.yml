@@ -11,7 +11,7 @@
       server: "ossec_server"
 
     # When going into PROD, set this to `true` to harden security groups
-    playbook_post_sec_harden: true
+    playbook_post_sec_harden: false
 
   pre_tasks:
     - include: tests.yml
