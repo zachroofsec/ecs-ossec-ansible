@@ -20,8 +20,8 @@ autoscaling_role_region_ami_map:
 autoscaling_role_instance_type: "m3.medium"
 
 autoscaling_role_iam_role:
-  client: "zachroof.autoscaling-role.client"
-  server: "zachroof.autoscaling-role.server"
+  client: "zachroof.autoscaling_role.client"
+  server: "zachroof.autoscaling_role.server"
 
 # Private DNS space that the OSSEC Server leverages
 autoscaling_role_ossec_zone: "ossec"

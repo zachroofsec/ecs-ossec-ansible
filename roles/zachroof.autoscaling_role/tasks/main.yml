@@ -59,6 +59,15 @@
 
 - debug: var="autoscaling_role_server_policies_output" verbosity=3
 
+# Sometimes it takes a little while for AWS to notice the new IAM role (or changes to it).
+- name: "Give AWS Time To Properly Ingest IAM Role Changes"
+  pause:
+    minutes: 1
+  register: "iam_pause_output"
+  when: autoscaling_role_shared_iam_role_output.changed == true
+
+- debug: var="iam_pause_output" verbosity=3
+
 # PROD-TODO: Investigate enabling Security Enhanced Linux (SELinux) within the AWS' ECS ami that we're
 # leveraging.  Also investigate SELinux policies for OSSEC Server/Agent docker containers
 
