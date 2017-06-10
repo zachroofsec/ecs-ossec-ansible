@@ -12,11 +12,13 @@ You'll notice some items that say `PROD-TODO:`.  If you're deploying into PROD, 
 # Requirements
 1) Latest Boto Client (`pip install boto`)
 2) Ansible 2.4 or greater (`pip install git+git://github.com/ansible/ansible.git@devel`)
-  * As of 6/7/2017 Ansible 2.4 is in devel branch
+
+   As of 6/7/2017 Ansible 2.4 is in devel branch
 3) aws cli (`pip install --upgrade --user awscli`)
 
-4) AWS credentials with a poweruser role attached
-  * `export AWS_ACCESS_KEY_ID=foo`
-  * `export AWS_SECRET_ACCESS_KEY=bar`
+4) AWS credentials with a `PowerUserAccess` policy attached
 
-5) `ansible-playbook main_playbook.yml` :D
+   `export AWS_ACCESS_KEY_ID=foo`
+   `export AWS_SECRET_ACCESS_KEY=bar`
+
+5) `ansible-playbook main_playbook.yml`
