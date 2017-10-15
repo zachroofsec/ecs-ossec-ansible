@@ -1,5 +1,4 @@
 # General Info
-My first time using Ansible! Woo hoo
 
 This playbook orchestrates an OSSEC Client and Server environment through AWS Elastic Container Service.
 The client finds the server through a Private Hosted Zone (`manager.ossec`) within the created VPC
